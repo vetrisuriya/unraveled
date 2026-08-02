@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>UNRAVELED — Vellore Fort</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#0a0e14; font-family:'Georgia','Times New Roman',serif; }
+  #game-canvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; background:#1b2a1e; }
+
+  #title-screen {
+    position:fixed; inset:0; z-index:50;
+    background: radial-gradient(ellipse at center, #1a2233 0%, #05070c 100%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#e8c877; text-align:center; padding:20px; overflow-y:auto;
+  }
+  #title-screen h1 {
+    font-size:clamp(2.2em, 9vw, 4.6em); letter-spacing:0.15em; font-weight:400;
+    text-shadow:0 0 25px rgba(232,200,119,0.5), 0 4px 12px rgba(0,0,0,0.8); margin-bottom:6px;
+  }
+  #title-screen .sub { color:#9fb3c8; letter-spacing:0.3em; font-size:0.8em; text-transform:uppercase; margin-bottom:22px; }
+  #title-screen p.lore { max-width:560px; color:#c9d3de; font-size:0.9em; line-height:1.6; margin-bottom:16px; opacity:0.88; }
+  #title-screen p.lore b { color:#e8c877; font-weight:normal; }
+  #start-btn {
+    background:linear-gradient(180deg,#e8c877,#b8935a); color:#1a1005; border:none; padding:14px 44px;
+    font-size:1.05em; letter-spacing:0.15em; text-transform:uppercase; border-radius:2px; cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,0.5); font-family:inherit; margin-top:10px;
+  }
+  #start-btn:active { transform:translateY(2px); }
+  #title-screen .hint { margin-top:16px; margin-bottom:20px; color:#6b7686; font-size:0.72em; letter-spacing:0.06em; }
+
+  #hud { position:fixed; inset:0; z-index:20; pointer-events:none; display:none; }
+  #objective {
+    position:absolute; top:14px; left:14px; right:14px; max-width:420px;
+    background:rgba(10,14,20,0.6); border-left:3px solid #e8c877; padding:9px 13px;
+    color:#e8dcc0; font-size:0.8em; line-height:1.4; border-radius:2px;
+  }
+  #journal-btn {
+    position:absolute; top:14px; right:14px; pointer-events:auto;
+    background:rgba(10,14,20,0.65); border:1px solid rgba(232,200,119,0.4); color:#e8c877;
+    padding:8px 12px; font-size:0.75em; border-radius:3px; cursor:pointer; letter-spacing:0.04em; font-family:inherit;
+  }
+  #interact-prompt {
+    position:absolute; bottom:22%; left:50%; transform:translateX(-50%);
+    background:rgba(10,14,20,0.8); color:#e8c877; padding:9px 18px; border-radius:18px;
+    font-size:0.88em; display:none; border:1px solid rgba(232,200,119,0.4); white-space:nowrap; max-width:90vw; text-align:center;
+  }
+
+  #joystick-zone { position:absolute; left:22px; bottom:22px; width:110px; height:110px; pointer-events:auto; touch-action:none; }
+  #joystick-base { width:110px; height:110px; border-radius:50%; background:rgba(232,200,119,0.12); border:1px solid rgba(232,200,119,0.35); }
+  #joystick-knob { position:absolute; top:30px; left:30px; width:50px; height:50px; border-radius:50%; background:rgba(232,200,119,0.55); pointer-events:none; }
+  #interact-btn {
+    position:absolute; right:26px; bottom:32px; width:70px; height:70px; border-radius:50%;
+    background:rgba(232,200,119,0.85); color:#1a1005; font-weight:bold; font-size:0.72em;
+    display:flex; align-items:center; justify-content:center; pointer-events:auto; touch-action:none;
+    border:2px solid rgba(255,255,255,0.4); letter-spacing:0.02em; text-align:center;
+  }
+
+  #puzzle-modal, #lore-modal, #journal-modal { position:fixed; inset:0; z-index:60; display:none; background:rgba(4,6,10,0.92); color:#e8dcc0; align-items:center; justify-content:center; padding:20px; }
+  #puzzle-box, #lore-box, #journal-box { max-width:540px; width:100%; background:#12161f; border:1px solid rgba(232,200,119,0.3); border-radius:6px; padding:24px; max-height:88vh; overflow-y:auto; }
+  #puzzle-box h2, #lore-box h2, #journal-box h2 { color:#e8c877; font-weight:400; letter-spacing:0.1em; margin-bottom:10px; font-size:1.25em; }
+  #puzzle-box .desc, #lore-box .desc { font-size:0.85em; line-height:1.65; color:#c9d3de; margin-bottom:16px; }
+  .glyph-row { display:flex; gap:9px; flex-wrap:wrap; margin-bottom:16px; justify-content:center; }
+  .glyph { width:52px; height:52px; border:1px solid rgba(232,200,119,0.4); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:1.5em; color:#e8c877; background:rgba(232,200,119,0.05); cursor:pointer; }
+  .glyph.matched { background:rgba(120,200,120,0.25); border-color:#7ecb7e; cursor:default; }
+  .word-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; justify-content:center; }
+  .word-choice { padding:8px 14px; border:1px solid rgba(159,179,200,0.4); border-radius:16px; color:#c9d3de; font-size:0.82em; cursor:pointer; background:rgba(255,255,255,0.03); }
+  .word-choice.used { opacity:0.25; pointer-events:none; }
+  #translation-line { min-height:36px; border-bottom:1px dashed rgba(232,200,119,0.3); margin-bottom:16px; font-style:italic; color:#e8c877; font-size:0.92em; padding-bottom:8px; }
+  #puzzle-feedback { font-size:0.78em; color:#7ecb7e; min-height:18px; margin-bottom:10px; }
+  #puzzle-close, #puzzle-reset, #lore-close, #journal-close { background:none; border:1px solid rgba(232,200,119,0.4); color:#e8c877; padding:8px 18px; border-radius:2px; cursor:pointer; font-family:inherit; margin-right:10px; margin-top:6px; }
+
+  .journal-section-title { color:#9fb3c8; font-size:0.75em; letter-spacing:0.15em; text-transform:uppercase; margin:16px 0 8px; }
+  .journal-entry { border-left:2px solid rgba(232,200,119,0.35); padding:6px 0 6px 12px; margin-bottom:8px; }
+  .journal-entry.locked { border-color:rgba(159,179,200,0.2); opacity:0.45; }
+  .journal-entry .je-title { color:#e8c877; font-size:0.88em; margin-bottom:3px; }
+  .journal-entry.locked .je-title { color:#9fb3c8; }
+  .journal-entry .je-text { color:#c9d3de; font-size:0.78em; line-height:1.5; }
+  #journal-progress { color:#9fb3c8; font-size:0.78em; margin-bottom:6px; }
+
+  #ending-banner {
+    position:fixed; top:16%; left:50%; transform:translateX(-50%); z-index:40;
+    color:#e8c877; font-size:clamp(1.1em,3.4vw,1.8em); text-align:center; letter-spacing:0.08em;
+    text-shadow:0 0 20px rgba(232,200,119,0.6); display:none; pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+
+<div id="title-screen">
+  <div class="sub">A Vellore Fort Legend</div>
+  <h1>UNRAVELED</h1>
+  <p class="lore">
+    <b>Vellore Fort</b> has stood since around 1566 CE, raised by the Vijayanagara chieftains Chinna Bommi Nayak
+    and Thimma Reddy Nayak. Bijapur sultans, Marathas, Mughals, Arcot Nawabs and finally the British all held
+    these granite walls in turn — the temple inside was even turned into a granary for a time before the
+    Marathas restored it and raised its gopuram. The British imprisoned Tipu Sultan's family here, and in 1806
+    the fort's own sepoys rose against them in one of India's earliest revolts.
+  </p>
+  <p class="lore">
+    But your family tells a story the history books don't: that when the great moat was dug against invaders,
+    a <b>golden chariot</b> went into the water with it — hidden, and never raised again. Cross the bridge.
+    Walk the fort. Read what history is still standing. Then find the inscription no one living can read.
+  </p>
+  <button id="start-btn">Begin</button>
+  <div class="hint">Arrow keys / WASD to move, E to interact, J for journal &nbsp;•&nbsp; Mobile: joystick + buttons</div>
+</div>
+
+<div id="hud">
+  <div id="objective">Follow the main road to the Government Gate and cross the bridge into the fort.</div>
+  <button id="journal-btn">JOURNAL 0/15</button>
+  <div id="interact-prompt">Press E to interact</div>
+  <div id="joystick-zone"><div id="joystick-base"></div><div id="joystick-knob"></div></div>
+  <div id="interact-btn">USE</div>
+</div>
+
+<div id="ending-banner">The pond stirs. The chariot rises.</div>
+
+<div id="puzzle-modal">
+  <div id="puzzle-box">
+    <h2>The Weathered Inscription</h2>
+    <div class="desc">Old boundary script, worn smooth by monsoon rain. Match each glyph to the word your family's story says it carries, in order, to complete the line.</div>
+    <div class="glyph-row" id="glyph-row"></div>
+    <div id="translation-line">— — — — —</div>
+    <div class="word-row" id="word-row"></div>
+    <div id="puzzle-feedback"></div>
+    <button id="puzzle-close">Close</button>
+    <button id="puzzle-reset">Reset</button>
+  </div>
+</div>
+
+<div id="lore-modal">
+  <div id="lore-box">
+    <h2 id="lore-title">—</h2>
+    <div class="desc" id="lore-text">—</div>
+    <button id="lore-close">Close</button>
+  </div>
+</div>
+
+<div id="journal-modal">
+  <div id="journal-box">
+    <h2>Journal</h2>
+    <div id="journal-progress">0 / 15 historic sites discovered</div>
+    <div class="journal-section-title">Fort History</div>
+    <div id="journal-history"></div>
+    <div class="journal-section-title">The Family Legend</div>
+    <div id="journal-legend"></div>
+    <button id="journal-close">Close</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ============================================================
+     CANVAS SETUP
+  ============================================================ */
+  const canvas = document.getElementById('game-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize); resize();
+
+  const TILE = 32;
+
+  /* ============================================================
+     FORT GEOMETRY — rectangular bastioned layout (more accurate
+     to the real fort's plan than a circular ring)
+  ============================================================ */
+  const ISLAND_HX=17, ISLAND_HY=15;   // walkable interior
+  const WALL_HX=18,   WALL_HY=16;     // granite rampart band (1 tile thick)
+  const MOAT_HX=25,   MOAT_HY=23;     // the Agazhi (moat)
+  const ROAD_LEN = 13;                // main road south of the moat
+  const GATE_HW = 2;                  // gate corridor half-width (5 tiles)
+
+  const CENTER_X = MOAT_HX+3, CENTER_Y = MOAT_HY+3;
+  const MAP_W = CENTER_X*2+1, MAP_H = CENTER_Y + MOAT_HY + ROAD_LEN + 3;
+
+  const T = { GRASS:0, PATH:1, WALL:2, WATER:3, EXTERIOR:4, BUILDING:5, SIGN:6, RUBBLE:7, BRIDGE:8, ROAD:9 };
+  function isSolid(t){ return t===T.WALL || t===T.WATER || t===T.EXTERIOR || t===T.BUILDING || t===T.SIGN || t===T.RUBBLE; }
+  function isTall(t){ return t===T.WALL || t===T.BUILDING || t===T.SIGN || t===T.RUBBLE; }
+
+  const map = [], buildingIdGrid = [];
+  for (let y=0;y<MAP_H;y++){
+    const row=[], brow=[];
+    for (let x=0;x<MAP_W;x++){
+      const dx=x-CENTER_X, dy=y-CENTER_Y;
+      const adx=Math.abs(dx), ady=Math.abs(dy);
+      let t;
+      if (adx<=ISLAND_HX && ady<=ISLAND_HY) t=T.GRASS;
+      else if (adx<=WALL_HX && ady<=WALL_HY) t=T.WALL;
+      else if (adx<=MOAT_HX && ady<=MOAT_HY) t=T.WATER;
+      else t=T.EXTERIOR;
+      row.push(t); brow.push(-1);
+    }
+    map.push(row); buildingIdGrid.push(brow);
+  }
+
+  // carve the Government Gate corridor (south) — wall -> path, moat -> bridge, exterior -> road
+  for (let y=0;y<MAP_H;y++) for (let x=0;x<MAP_W;x++){
+    const dx=x-CENTER_X, dy=y-CENTER_Y;
+    if (dx>=-GATE_HW && dx<=GATE_HW && dy>ISLAND_HY){
+      if (map[y][x]===T.WALL) map[y][x]=T.PATH;
+      else if (map[y][x]===T.WATER) map[y][x]=T.BRIDGE;
+      else if (map[y][x]===T.EXTERIOR && dy<=MOAT_HY+ROAD_LEN) map[y][x]=T.ROAD;
+    }
+  }
+  // courtyard ring road + spokes
+  function carvePath(x0,y0,x1,y1){
+    let x=x0,y=y0;
+    while (x!==x1){ if (map[y] && map[y][x]===T.GRASS) map[y][x]=T.PATH; x += x1>x?1:-1; }
+    while (y!==y1){ if (map[y] && map[y][x]===T.GRASS) map[y][x]=T.PATH; y += y1>y?1:-1; }
+  }
+  for (let y=0;y<MAP_H;y++) for (let x=0;x<MAP_W;x++){
+    const dx=x-CENTER_X, dy=y-CENTER_Y, d=Math.sqrt(dx*dx+dy*dy);
+    if (map[y][x]===T.GRASS && d>5.5 && d<6.8) map[y][x]=T.PATH;
+  }
+  const gy = CENTER_Y+ISLAND_HY-1;
+  carvePath(CENTER_X, gy, CENTER_X, CENTER_Y+6);
+  carvePath(CENTER_X, CENTER_Y-6, CENTER_X, CENTER_Y-5);
+  carvePath(CENTER_X, CENTER_Y+6, CENTER_X-14, CENTER_Y+6);
+  carvePath(CENTER_X, CENTER_Y+6, CENTER_X+9, CENTER_Y+3);
+  carvePath(CENTER_X, CENTER_Y-6, CENTER_X-10, CENTER_Y-2);
+  carvePath(CENTER_X, CENTER_Y-6, CENTER_X+9, CENTER_Y-9);
+  carvePath(CENTER_X, CENTER_Y+6, CENTER_X, CENTER_Y+9);
+  carvePath(CENTER_X, CENTER_Y+6, CENTER_X+6, CENTER_Y+6);
+  carvePath(CENTER_X, CENTER_Y+6, CENTER_X+16, CENTER_Y);
+
+  function worldPx(tx,ty){ return { x: tx*TILE, y: ty*TILE }; }
+
+  /* ============================================================
+     BUILDINGS — real Vellore Fort landmarks, more structural detail
+  ============================================================ */
+  const buildings = [];
+  function placeBuilding(def){
+    const id = buildings.length;
+    const {dx,dy,w,h,color,roof,name,lore,height} = def;
+    const tx=CENTER_X+dx, ty=CENTER_Y+dy;
+    for (let y=ty;y<ty+h;y++) for (let x=tx;x<tx+w;x++){
+      if (map[y] && map[y][x]!==undefined){ map[y][x]=T.BUILDING; buildingIdGrid[y][x]=id; }
+    }
+    buildings.push({ id, tx, ty, w, h, color, roof, height: height||TILE*1.15, name, lore, centerWorld: worldPx(tx+w/2, ty+h/2) });
+    return id;
+  }
+
+  // --- Temple complex (approached south-to-north: gopuram gate -> mandapam -> sanctum) ---
+  const gopuramId = placeBuilding({ dx:-1, dy:-3, w:3, h:2, color:'#c9a562', roof:'#e8cf94', height:TILE*3.4,
+    name:'Temple Gopuram',
+    lore:"This tiered gateway tower marks the temple's threshold. The shrine itself dates to around 1550, credited to the chieftain Bommi Reddi \u2014 but the tower you're standing under is younger: it was added when the Marathas restored the temple after a period of neglect." });
+
+  const mandapamId = placeBuilding({ dx:-1, dy:-6, w:3, h:2, color:'#b89a63', roof:'#d4b876', height:TILE*1.5,
+    name:'Kalyana Mandapam & Nandi Shrine',
+    lore:"The pillared hall before the sanctum is carved with dragons, horses and lion-like yalis on nearly every column. A stone Nandi faces the sanctum beyond, as tradition asks, watching over the god within." });
+
+  const templeId = placeBuilding({ dx:-3, dy:-12, w:7, h:5, color:'#cda86a', roof:'#e6c98a', height:TILE*2.1,
+    name:'Jalakandeswarar Temple',
+    lore:"Vijayanagara rulers built this Shiva shrine around 1550. Its name comes from the Sanskrit for \u201clord who dwells in water,\u201d fitting for a temple so close to the moat. When the Bijapur Sultanate later held the fort, the temple was reportedly stripped of worship and used as a granary \u2014 it wasn't restored to active use until the Marathas took it back." });
+
+  const ammanId = placeBuilding({ dx:4, dy:-10, w:2, h:2, color:'#c79a6e', roof:'#e0bb8c', height:TILE*1.4,
+    name:'Akilandeswari Amman Shrine',
+    lore:"A smaller sanctum beside the main shrine, dedicated to Goddess Akilandeswari \u2014 Shiva's consort in this temple's telling, honoured here in her own separate enclosure." });
+
+  const churchId = placeBuilding({ dx:-14, dy:1, w:5, h:5, color:'#d8d2c2', roof:'#8a5a44', height:TILE*1.8,
+    name:"St. John's Church",
+    lore:"Built in 1846 for the East India Company garrison stationed inside the fort, and still the oldest active church in the Vellore diocese. Its grounds hold the graves of British soldiers killed in the 1806 mutiny." });
+
+  const mosqueId = placeBuilding({ dx:8, dy:-13, w:5, h:5, color:'#a9c9a0', roof:'#5f8a6f', height:TILE*1.7,
+    name:'The Mosque',
+    lore:"Built in 1750 under Nawab Chanda Sahib, the last of the Arcot Nawabs, its entrance set toward the fort's northern wall \u2014 exactly where it still stands. Prayers are no longer held here, but the brick-and-lime structure remains in good shape." });
+
+  const mahalId = placeBuilding({ dx:-14, dy:-6, w:6, h:4, color:'#8a6f63', roof:'#5f4a40', height:TILE*1.6,
+    name:'Tipu Mahal & Hyder Mahal',
+    lore:"After Tipu Sultan's death in 1799, his wives, sons and a household said to number in the thousands were exiled here as pensioners of the East India Company. Their mistreatment helped spark the mutiny of 1806. Access remains restricted to this day." });
+
+  const museumId = placeBuilding({ dx:9, dy:2, w:5, h:4, color:'#9aa3ad', roof:'#6b7480', height:TILE*1.5,
+    name:'ASI Museum',
+    lore:"Since independence, Vellore Fort has been a protected monument. This museum gathers what centuries of use left behind \u2014 temple carvings, weapons, and everyday fragments of fort life." });
+
+  const granaryId = placeBuilding({ dx:-2, dy:9, w:4, h:4, color:'#7c6a4a', roof:'#5a4a32', height:TILE*1.3,
+    name:'The Granary',
+    lore:"A fort under siege has to feed itself. This storehouse is a reminder that Vellore's walls were built to outlast a long blockade, not just survive a single battle." });
+
+  // corner bastions (decorative, matches the fort's real bastioned granite ramparts)
+  [[WALL_HX-2,-WALL_HY],[-WALL_HX,-WALL_HY],[WALL_HX-2,WALL_HY-2],[-WALL_HX,WALL_HY-2]].forEach((c,i)=>{
+    placeBuilding({ dx:c[0], dy:c[1], w:2, h:2, color:'#7e7256', roof:'#9c8c68', height:TILE*1.9,
+      name:'Corner Bastion', lore:"One of the fort's projecting granite bastions, built so defenders could cover the walls on either side with crossing fire \u2014 standard practice for the fortifications of this period." });
+  });
+
+  // gatehouses flanking the Government Gate
+  [[-GATE_HW-2, ISLAND_HY-1],[GATE_HW, ISLAND_HY-1]].forEach(c=>{
+    placeBuilding({ dx:c[0], dy:c[1], w:2, h:2, color:'#8a7a5e', roof:'#a89572', height:TILE*1.7,
+      name:'Gatehouse', lore:"Vellore Fort was built with four gateways in its granite walls. This is the one still used to enter today \u2014 a bridge carries the road across the moat that has guarded this threshold since the 1500s." });
+  });
+
+  /* ============================================================
+     SIGNS — standalone lore markers
+  ============================================================ */
+  const signs = [];
+  function placeSign(dx,dy,name,lore){
+    const tx=CENTER_X+dx, ty=CENTER_Y+dy;
+    if (map[ty] && map[ty][tx]!==undefined) map[ty][tx]=T.SIGN;
+    // Bug fix: signs tucked against building walls could end up with no open
+    // adjacent tile within interact range. Force-clear the 4 orthogonal
+    // neighbours (unless they're the fort wall itself) so every sign is
+    // always approachable from at least one side.
+    [[0,-1],[0,1],[-1,0],[1,0]].forEach(([ox,oy])=>{
+      const nx=tx+ox, ny=ty+oy;
+      if (!map[ny] || map[ny][nx]===undefined) return;
+      const t = map[ny][nx];
+      if (t===T.BUILDING || t===T.RUBBLE) map[ny][nx]=T.PATH;
+    });
+    const w = worldPx(tx,ty);
+    signs.push({ name, lore, world:{x:w.x+TILE/2,y:w.y+TILE/2}, discovered:false });
+  }
+
+  placeSign(0, -4, 'Jalakandeswarar Temple', buildings[templeId].lore);
+  placeSign(2, -5, 'Temple Gopuram', buildings[gopuramId].lore);
+  placeSign(3, -6, 'Kalyana Mandapam & Nandi Shrine', buildings[mandapamId].lore);
+  placeSign(6, -9, 'Akilandeswari Amman Shrine', buildings[ammanId].lore);
+  placeSign(-11, 6, "St. John's Church", buildings[churchId].lore);
+  placeSign(10, -8, 'The Mosque', buildings[mosqueId].lore);
+  placeSign(-10, -2, 'Tipu Mahal & Hyder Mahal', buildings[mahalId].lore);
+  placeSign(11, 6, 'ASI Museum', buildings[museumId].lore);
+  placeSign(0, 13, 'The Granary', buildings[granaryId].lore);
+  placeSign(-7, 0, 'Muthu Mandapam',
+    "A memorial associated with Vikrama Rajasinha, the last king of Kandy in Sri Lanka, who was also held within these walls under British watch \u2014 a long way from home.");
+  placeSign(6, 9, 'Mutiny Memorial',
+    "On 10 July 1806, sepoys inside this fort rose against their British officers \u2014 one of the earliest armed revolts against East India Company rule, more than fifty years before 1857. It was put down within a day, but never forgotten.");
+  placeSign(5, 13, 'The Moat (Agazhi)',
+    "Local memory holds that this wide moat once kept crocodiles, a living deterrent to anyone thinking of swimming the fort's defenses. True or not, no one has ever doubted why it was dug.");
+  placeSign(16, 0, 'The Ramparts',
+    "Chinna Bommi Nayak and Thimma Reddy Nayak, chieftains serving the Vijayanagara emperor Sadasiva Raya, had these granite walls raised around 1566 to guard the region's northern frontier.");
+  placeSign(6, 6, 'The Sealed Tunnel',
+    "Rubble blocks what locals still call an escape passage, said to run more than ten kilometres to Virinjipuram \u2014 built, the story goes, so the fort's rulers were never truly trapped.");
+  { const tx=CENTER_X+6, ty=CENTER_Y+7; if (map[ty] && map[ty][tx]!==undefined) map[ty][tx]=T.RUBBLE; }
+  placeSign(3, ISLAND_HY-2, 'Government Gate',
+    "Vellore Fort's granite ramparts once had four gateways piercing them. This is the one still in use \u2014 the road you just walked in on runs about a kilometre and a half back to the old Vellore railway station.");
+
+  /* ============================================================
+     INSCRIPTION STONE (special interactable — the family legend)
+  ============================================================ */
+  const INSC_X = CENTER_X-6, INSC_Y = CENTER_Y-9;
+  map[INSC_Y][INSC_X] = T.SIGN;
+  [[0,-1],[0,1],[-1,0],[1,0]].forEach(([ox,oy])=>{
+    const nx=INSC_X+ox, ny=INSC_Y+oy;
+    if (!map[ny] || map[ny][nx]===undefined) return;
+    if (map[ny][nx]===T.BUILDING || map[ny][nx]===T.RUBBLE) map[ny][nx]=T.PATH;
+  });
+  const inscriptionWorld = { x: INSC_X*TILE+TILE/2, y: INSC_Y*TILE+TILE/2 };
+
+  /* ============================================================
+     GOLDEN CHARIOT SPOT (within the moat)
+  ============================================================ */
+  // Placed on the west side of the moat, roughly level with the temple/inscription —
+  // must land strictly between the WALL band and the MOAT edge so it's actually in the water.
+  const chariotDX = -Math.round((WALL_HX+MOAT_HX)/2);
+  const chariotDY = -9;
+  const chariotTileX = CENTER_X + chariotDX;
+  const chariotTileY = CENTER_Y + chariotDY;
+  const chariotWorld = { x: chariotTileX*TILE+TILE/2, y: chariotTileY*TILE+TILE/2 };
+
+  /* ============================================================
+     PLAYER — starts outside, on the main road
+  ============================================================ */
+  const startTX = CENTER_X, startTY = CENTER_Y+MOAT_HY+8;
+  const player = { x:startTX*TILE+TILE/2, y:startTY*TILE+TILE/2, r:9, speed:170, dir:'up', moving:false };
+
+  function tileAt(px,py){
+    const tx=Math.floor(px/TILE), ty=Math.floor(py/TILE);
+    if (ty<0||ty>=MAP_H||tx<0||tx>=MAP_W) return T.EXTERIOR;
+    return map[ty][tx];
+  }
+  function canStand(px,py){
+    const pad=player.r*0.8;
+    const pts=[[px-pad,py-pad],[px+pad,py-pad],[px-pad,py+pad],[px+pad,py+pad]];
+    return pts.every(p => !isSolid(tileAt(p[0],p[1])));
+  }
+
+  /* ============================================================
+     INPUT
+  ============================================================ */
+  const keys = {};
+  window.addEventListener('keydown', e => {
+    const k=e.key.toLowerCase(); keys[k]=true;
+    if (k==='e') tryInteract();
+    if (k==='j') toggleJournal();
+  });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()]=false; });
+
+  let joyDX=0, joyDY=0, joyActive=false, joyStartX=0, joyStartY=0;
+  const joyZone = document.getElementById('joystick-zone');
+  const joyKnob = document.getElementById('joystick-knob');
+  function joyStart(x,y){ joyActive=true; joyStartX=x; joyStartY=y; }
+  function joyMove(x,y){
+    if(!joyActive) return;
+    let dx=x-joyStartX, dy=y-joyStartY;
+    const mag=Math.min(Math.hypot(dx,dy),38);
+    const ang=Math.atan2(dy,dx);
+    dx=Math.cos(ang)*mag; dy=Math.sin(ang)*mag;
+    joyDX=dx/38; joyDY=dy/38;
+    joyKnob.style.transform=`translate(${dx}px,${dy}px)`;
+  }
+  function joyEnd(){ joyActive=false; joyDX=0; joyDY=0; joyKnob.style.transform='translate(0,0)'; }
+  joyZone.addEventListener('touchstart', e=>{ const t=e.touches[0]; joyStart(t.clientX,t.clientY); }, {passive:true});
+  joyZone.addEventListener('touchmove', e=>{ const t=e.touches[0]; joyMove(t.clientX,t.clientY); }, {passive:true});
+  joyZone.addEventListener('touchend', joyEnd);
+  joyZone.addEventListener('mousedown', e=>joyStart(e.clientX,e.clientY));
+  window.addEventListener('mousemove', e=>{ if(joyActive) joyMove(e.clientX,e.clientY); });
+  window.addEventListener('mouseup', joyEnd);
+
+  document.getElementById('interact-btn').addEventListener('touchstart', e=>{ e.preventDefault(); tryInteract(); });
+  document.getElementById('interact-btn').addEventListener('click', tryInteract);
+  document.getElementById('journal-btn').addEventListener('click', toggleJournal);
+
+  /* ============================================================
+     INTERACTION
+  ============================================================ */
+  let solved = false, enteredFort = false;
+  let currentTarget = null;
+  const interactPrompt = document.getElementById('interact-prompt');
+  const objectiveEl = document.getElementById('objective');
+  const journalBtn = document.getElementById('journal-btn');
+
+  function updateNearestInteractable(){
+    let best=null, bestD=64;
+    const dInsc = Math.hypot(player.x-inscriptionWorld.x, player.y-inscriptionWorld.y);
+    if (!solved && dInsc<bestD){ best={type:'inscription'}; bestD=dInsc; }
+    for (const s of signs){
+      const d = Math.hypot(player.x-s.world.x, player.y-s.world.y);
+      if (d<bestD){ best={type:'sign', ref:s}; bestD=d; }
+    }
+    currentTarget = best;
+    interactPrompt.style.display = best ? 'block' : 'none';
+    if (best) interactPrompt.textContent = best.type==='inscription' ? 'Press E to examine the inscription' : ('Press E to read: '+best.ref.name);
+
+    if (!enteredFort && Math.abs(player.x/TILE-CENTER_X)<3 && (player.y/TILE-CENTER_Y) < ISLAND_HY-2){
+      enteredFort = true;
+      objectiveEl.textContent = 'Explore the fort and read its history. Find the inscription stone near the temple.';
+    }
+  }
+
+  function tryInteract(){
+    if (!currentTarget) return;
+    if (currentTarget.type==='inscription') openPuzzle();
+    else openLore(currentTarget.ref);
+  }
+
+  /* ============================================================
+     LORE MODAL
+  ============================================================ */
+  const loreModal = document.getElementById('lore-modal');
+  const loreTitle = document.getElementById('lore-title');
+  const loreText = document.getElementById('lore-text');
+  function openLore(sign){
+    if (!sign.discovered){
+      sign.discovered = true;
+      journalBtn.textContent = 'JOURNAL ' + signs.filter(s=>s.discovered).length + '/15';
+    }
+    loreTitle.textContent = sign.name;
+    loreText.textContent = sign.lore;
+    loreModal.style.display = 'flex';
+  }
+  document.getElementById('lore-close').addEventListener('click', ()=> loreModal.style.display='none');
+
+  /* ============================================================
+     JOURNAL MODAL
+  ============================================================ */
+  const journalModal = document.getElementById('journal-modal');
+  const journalHistory = document.getElementById('journal-history');
+  const journalLegend = document.getElementById('journal-legend');
+  const journalProgress = document.getElementById('journal-progress');
+  function toggleJournal(){
+    if (journalModal.style.display==='flex'){ journalModal.style.display='none'; return; }
+    renderJournal();
+    journalModal.style.display='flex';
+  }
+  document.getElementById('journal-close').addEventListener('click', ()=> journalModal.style.display='none');
+  function renderJournal(){
+    const found = signs.filter(s=>s.discovered).length;
+    journalProgress.textContent = found+' / 15 historic sites discovered';
+    journalHistory.innerHTML='';
+    signs.forEach(s=>{
+      const el=document.createElement('div');
+      el.className='journal-entry'+(s.discovered?'':' locked');
+      el.innerHTML=`<div class="je-title">${s.discovered?s.name:'??? (undiscovered)'}</div><div class="je-text">${s.discovered?s.lore:'Explore the fort to uncover this site.'}</div>`;
+      journalHistory.appendChild(el);
+    });
+    journalLegend.innerHTML='';
+    const legendEntries=[
+      { title:'The Family Legend', text:"Your family has always told it the same way: when the great moat was dug against invaders in the 1800s, something else went into the water with it \u2014 a golden chariot, lowered for safekeeping and never raised again. Somewhere on these walls, they say, is the proof.", known:true },
+      { title:'The Chariot Rises', text:'The inscription was true. The waters of the moat parted, and the golden chariot your family always spoke of rose into the light.', known:solved }
+    ];
+    legendEntries.forEach(le=>{
+      const el=document.createElement('div');
+      el.className='journal-entry'+(le.known?'':' locked');
+      el.innerHTML=`<div class="je-title">${le.known?le.title:'???'}</div><div class="je-text">${le.known?le.text:'Keep exploring.'}</div>`;
+      journalLegend.appendChild(el);
+    });
+  }
+
+  /* ============================================================
+     PUZZLE (glyph matching)
+  ============================================================ */
+  const puzzleData = [
+    { glyph:'\u25c8', word:'waters', matched:false },
+    { glyph:'\u2625', word:'shall', matched:false },
+    { glyph:'\u25ec', word:'yield', matched:false },
+    { glyph:'\u27c1', word:'the', matched:false },
+    { glyph:'\u2726', word:'golden one', matched:false }
+  ];
+  let selectedGlyphIdx = null;
+  const glyphRow = document.getElementById('glyph-row');
+  const wordRow = document.getElementById('word-row');
+  const translationLine = document.getElementById('translation-line');
+  const feedback = document.getElementById('puzzle-feedback');
+  const modal = document.getElementById('puzzle-modal');
+
+  function renderPuzzle(){
+    glyphRow.innerHTML='';
+    puzzleData.forEach((g,i)=>{
+      const el=document.createElement('div');
+      el.className='glyph'+(g.matched?' matched':'');
+      el.textContent=g.matched?'\u2713':g.glyph;
+      el.addEventListener('click', ()=>{ if(!g.matched) selectedGlyphIdx=i; });
+      glyphRow.appendChild(el);
+    });
+    if (!renderPuzzle._shuffled){
+      renderPuzzle._order = puzzleData.map((_,i)=>i).sort(()=>Math.random()-0.5);
+      renderPuzzle._shuffled = true;
+    }
+    wordRow.innerHTML='';
+    renderPuzzle._order.forEach(i=>{
+      const w=puzzleData[i];
+      const el=document.createElement('div');
+      el.className='word-choice'+(w.matched?' used':'');
+      el.textContent=w.word;
+      el.addEventListener('click', ()=>{
+        if (selectedGlyphIdx===null){ feedback.textContent='Select a glyph first.'; return; }
+        if (selectedGlyphIdx===i){
+          puzzleData[i].matched=true;
+          feedback.textContent='Correct \u2014 the meaning holds.';
+          selectedGlyphIdx=null;
+          renderPuzzle();
+          checkComplete();
+        } else {
+          feedback.textContent="That does not fit the glyph's form. Try again.";
+          selectedGlyphIdx=null;
+        }
+      });
+      wordRow.appendChild(el);
+    });
+    translationLine.textContent = puzzleData.map(g=>g.matched?g.word:'\u2014').join('   ');
+  }
+  function checkComplete(){
+    if (puzzleData.every(g=>g.matched)){
+      feedback.textContent='The inscription is whole. Close this to see what it wakes.';
+      setTimeout(()=>{ closePuzzle(); triggerReveal(); }, 900);
+    }
+  }
+  function openPuzzle(){ modal.style.display='flex'; renderPuzzle(); }
+  function closePuzzle(){ modal.style.display='none'; }
+  document.getElementById('puzzle-close').addEventListener('click', closePuzzle);
+  document.getElementById('puzzle-reset').addEventListener('click', ()=>{
+    puzzleData.forEach(g=>g.matched=false); selectedGlyphIdx=null; feedback.textContent=''; renderPuzzle();
+  });
+
+  /* ============================================================
+     REVEAL SEQUENCE + PARTICLES
+  ============================================================ */
+  let revealing=false, revealT=0;
+  const particles=[];
+  function triggerReveal(){
+    solved=true; revealing=true; revealT=0;
+    objectiveEl.textContent='The inscription reads true. The pond stirs.';
+    document.getElementById('ending-banner').style.display='block';
+    for (let i=0;i<70;i++){
+      particles.push({ x:chariotWorld.x+(Math.random()-0.5)*40, y:chariotWorld.y+(Math.random()-0.5)*40,
+        vy:-20-Math.random()*30, life:1+Math.random()*1.5, age:0 });
+    }
+  }
+
+  /* ============================================================
+     GAME LOOP
+  ============================================================ */
+  let lastT = performance.now();
+  function update(dt){
+    let mx=0,my=0;
+    if (keys['w']||keys['arrowup']) my-=1;
+    if (keys['s']||keys['arrowdown']) my+=1;
+    if (keys['a']||keys['arrowleft']) mx-=1;
+    if (keys['d']||keys['arrowright']) mx+=1;
+    mx+=joyDX; my+=joyDY;
+
+    const len=Math.hypot(mx,my);
+    player.moving = len>0.08;
+    if (player.moving){
+      mx/=len; my/=len;
+      if (Math.abs(mx)>Math.abs(my)) player.dir=mx>0?'right':'left';
+      else player.dir=my>0?'down':'up';
+      const nx=player.x+mx*player.speed*dt, ny=player.y+my*player.speed*dt;
+      if (canStand(nx,player.y)) player.x=nx;
+      if (canStand(player.x,ny)) player.y=ny;
+    }
+
+    updateNearestInteractable();
+
+    if (revealing){ revealT+=dt; if (revealT>2.2) revealing=false; }
+    for (let i=particles.length-1;i>=0;i--){
+      const p=particles[i]; p.age+=dt; p.y+=p.vy*dt;
+      if (p.age>p.life) particles.splice(i,1);
+    }
+  }
+
+  /* ============================================================
+     RENDERING
+  ============================================================ */
+  function tileColor(t,x,y){
+    const shade=((x+y)%2===0)?1:0.93;
+    switch(t){
+      case T.GRASS: return shadeCol(60,110,58,shade);
+      case T.PATH: return shadeCol(176,158,120,shade);
+      case T.WALL: return shadeCol(110,96,74,shade);
+      case T.WATER: return shadeCol(38,92,108,shade);
+      case T.EXTERIOR: return shadeCol(38,64,42,shade);
+      case T.BRIDGE: return shadeCol(120,86,52,shade);
+      case T.ROAD: return shadeCol(150,134,104,shade);
+      default: return shadeCol(60,110,58,shade);
+    }
+  }
+  function shadeCol(r,g,b,f){ return `rgb(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)})`; }
+
+  function draw(){
+    ctx.fillStyle='#0d1420'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    const camX=player.x-canvas.width/2, camY=player.y-canvas.height/2;
+    const sTX=Math.max(0,Math.floor(camX/TILE)-1), eTX=Math.min(MAP_W-1,Math.ceil((camX+canvas.width)/TILE)+1);
+    const sTY=Math.max(0,Math.floor(camY/TILE)-1), eTY=Math.min(MAP_H-1,Math.ceil((camY+canvas.height)/TILE)+1);
+
+    for (let ty=sTY; ty<=eTY; ty++){
+      for (let tx=sTX; tx<=eTX; tx++){
+        const t=map[ty][tx];
+        const sx=tx*TILE-camX, sy=ty*TILE-camY;
+        const groundT=(t===T.BUILDING||t===T.SIGN||t===T.RUBBLE)?T.GRASS:t;
+        ctx.fillStyle=tileColor(groundT,tx,ty);
+        ctx.fillRect(sx,sy,TILE,TILE);
+        if (t===T.WATER){
+          ctx.strokeStyle='rgba(255,255,255,0.08)';
+          ctx.beginPath();
+          const wob=Math.sin((tx*3+ty*2+performance.now()*0.002))*2;
+          ctx.moveTo(sx+2,sy+TILE/2+wob); ctx.lineTo(sx+TILE-2,sy+TILE/2-wob);
+          ctx.stroke();
+        }
+        if (t===T.BRIDGE){
+          ctx.strokeStyle='rgba(0,0,0,0.25)';
+          ctx.beginPath(); ctx.moveTo(sx,sy+TILE/2); ctx.lineTo(sx+TILE,sy+TILE/2); ctx.stroke();
+        }
+        if (t===T.PATH && (tx+ty)%5===0){ ctx.fillStyle='rgba(0,0,0,0.05)'; ctx.fillRect(sx+6,sy+6,3,3); }
+      }
+    }
+
+    const objs=[];
+    for (let ty=sTY; ty<=eTY; ty++){
+      for (let tx=sTX; tx<=eTX; tx++){
+        const t=map[ty][tx];
+        if (t===T.WALL) objs.push({type:'wall',tx,ty,sortY:ty*TILE+TILE});
+        else if (t===T.SIGN){
+          const isInsc=(tx===INSC_X && ty===INSC_Y);
+          objs.push({type:'sign',tx,ty,isInsc,sortY:ty*TILE+TILE+1});
+        } else if (t===T.RUBBLE) objs.push({type:'rubble',tx,ty,sortY:ty*TILE+TILE});
+      }
+    }
+    // buildings are drawn once per structure (not per tile) so multi-tile-deep
+    // buildings render as one coherent box instead of stacked/overlapping slices
+    const padRows = 6;
+    for (const b of buildings){
+      if (b.tx+b.w < sTX-1 || b.tx > eTX+1 || b.ty+b.h < sTY-padRows || b.ty > eTY+2) continue;
+      objs.push({ type:'building', b, sortY:(b.ty+b.h)*TILE });
+    }
+    objs.push({type:'player', sortY:player.y});
+    if (solved||revealing) objs.push({type:'chariot', sortY:chariotWorld.y+TILE});
+    objs.sort((a,b)=>a.sortY-b.sortY);
+    for (const o of objs){
+      if (o.type==='wall') drawWall(o.tx,o.ty,camX,camY);
+      else if (o.type==='building') drawBuilding(o.b,camX,camY);
+      else if (o.type==='sign') drawSign(o.tx,o.ty,o.isInsc,camX,camY);
+      else if (o.type==='rubble') drawRubble(o.tx,o.ty,camX,camY);
+      else if (o.type==='player') drawPlayer(camX,camY);
+      else if (o.type==='chariot') drawChariot(camX,camY);
+    }
+
+    for (const b of buildings){
+      if (b.name==='Corner Bastion' || b.name==='Gatehouse') continue;
+      const topWorldY = b.ty*TILE - (b.height-TILE);
+      const sx=b.centerWorld.x-camX, sy=topWorldY-camY-6;
+      if (sx>-50 && sx<canvas.width+50 && sy>-20 && sy<canvas.height+20){
+        ctx.fillStyle='rgba(232,220,192,0.85)'; ctx.font='11px Georgia'; ctx.textAlign='center';
+        ctx.fillText(b.name, sx, sy);
+      }
+    }
+
+    for (const p of particles){
+      const sx=p.x-camX, sy=p.y-camY, a=Math.max(0,1-p.age/p.life);
+      ctx.fillStyle=`rgba(255,230,168,${a})`; ctx.fillRect(sx-1.5,sy-1.5,3,3);
+    }
+  }
+
+  function drawWall(tx,ty,camX,camY){
+    const sx=tx*TILE-camX, sy=ty*TILE-camY, h=TILE*1.5;
+    ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(sx,sy+TILE-4,TILE,4);
+    ctx.fillStyle='rgb(96,84,66)'; ctx.fillRect(sx,sy-h+TILE,TILE,h);
+    ctx.fillStyle='rgb(126,112,90)'; ctx.fillRect(sx,sy-h+TILE-4,TILE,6);
+  }
+
+  function drawBuilding(b,camX,camY){
+    const left = b.tx*TILE - camX;
+    const width = b.w*TILE;
+    const bottomY = (b.ty+b.h)*TILE - camY;
+    const topY = b.ty*TILE - (b.height-TILE) - camY;
+    // ground shadow along the building's south (front) edge
+    ctx.fillStyle='rgba(0,0,0,0.25)';
+    ctx.fillRect(left, bottomY-4, width, 4);
+    // single coherent wall box — avoids the stacked/overridden look of per-tile drawing
+    ctx.fillStyle=b.color;
+    ctx.fillRect(left, topY, width, bottomY-topY);
+    // subtle side shading for depth
+    ctx.fillStyle='rgba(0,0,0,0.12)';
+    ctx.fillRect(left, topY, Math.min(7, width*0.18), bottomY-topY);
+    ctx.fillStyle='rgba(255,255,255,0.08)';
+    ctx.fillRect(left+width-Math.min(7,width*0.18), topY, Math.min(7,width*0.18), bottomY-topY);
+    // roof cap
+    ctx.fillStyle=b.roof;
+    ctx.fillRect(left, topY-3, width, 11);
+  }
+
+  function drawSign(tx,ty,isInsc,camX,camY){
+    const sx=tx*TILE-camX, sy=ty*TILE-camY, h=TILE*0.85;
+    const near = currentTarget && ((isInsc && currentTarget.type==='inscription') ||
+      (!isInsc && currentTarget.type==='sign' && Math.round(currentTarget.ref.world.x/TILE-0.5)===tx && Math.round(currentTarget.ref.world.y/TILE-0.5)===ty));
+    ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.fillRect(sx+6,sy+TILE-4,TILE-12,4);
+    ctx.fillStyle=isInsc?'rgb(70,62,50)':'rgb(90,80,64)';
+    ctx.fillRect(sx+8,sy-h+TILE,TILE-16,h);
+    ctx.fillStyle=near?'#ffe9a8':'#e8c877';
+    ctx.font='16px serif'; ctx.textAlign='center';
+    ctx.fillText(isInsc?'\u25c8':'\u2726', sx+TILE/2, sy-h+TILE+14);
+    if (near){ ctx.strokeStyle='rgba(232,200,119,0.7)'; ctx.lineWidth=2; ctx.strokeRect(sx+6,sy-h+TILE-2,TILE-12,h+4); }
+  }
+
+  function drawRubble(tx,ty,camX,camY){
+    const sx=tx*TILE-camX, sy=ty*TILE-camY;
+    ctx.fillStyle='rgb(80,74,64)';
+    ctx.beginPath();
+    ctx.moveTo(sx+4,sy+TILE-2); ctx.lineTo(sx+10,sy+8); ctx.lineTo(sx+18,sy+14);
+    ctx.lineTo(sx+26,sy+4); ctx.lineTo(sx+28,sy+TILE-2); ctx.closePath(); ctx.fill();
+  }
+
+  function drawPlayer(camX,camY){
+    const sx=player.x-camX, sy=player.y-camY;
+    ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(sx,sy+8,9,4,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#3a6ea5'; ctx.fillRect(sx-7,sy-10,14,16);
+    ctx.fillStyle='#e8c39a'; ctx.fillRect(sx-6,sy-20,12,11);
+    ctx.fillStyle='#1a1005';
+    let ix=sx, iy=sy-15, off=6;
+    if (player.dir==='down') iy+=off*0.4;
+    if (player.dir==='up') iy-=off*0.4;
+    if (player.dir==='left') ix-=off*0.6;
+    if (player.dir==='right') ix+=off*0.6;
+    ctx.fillRect(ix-2,iy-2,4,4);
+  }
+
+  function drawChariot(camX,camY){
+    const sx=chariotWorld.x-camX, sy=chariotWorld.y-camY;
+    let scale=1, floatOff=0;
+    if (revealing){ const p=Math.min(1,revealT/2.2); scale=Math.min(1,p*1.3); floatOff=(1-p)*30; }
+    else floatOff=Math.sin(performance.now()*0.002)*2;
+    ctx.save(); ctx.translate(sx,sy-floatOff); ctx.scale(scale,scale);
+    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.ellipse(0,12,18,6,0,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='#caa33d';
+    ctx.beginPath(); ctx.arc(-10,10,5,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(10,10,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#e8c877'; ctx.fillRect(-13,-6,26,14);
+    ctx.fillStyle='#f4dd9c'; ctx.beginPath(); ctx.arc(0,-6,9,Math.PI,0); ctx.fill();
+    ctx.fillStyle='#ffe9a8';
+    for (let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(i*5,-14); ctx.lineTo(i*5-2,-6); ctx.lineTo(i*5+2,-6); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  }
+
+  function loop(now){
+    const dt=Math.min((now-lastT)/1000,0.1);
+    lastT=now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  document.getElementById('start-btn').addEventListener('click', ()=>{
+    document.getElementById('title-screen').style.display='none';
+    document.getElementById('hud').style.display='block';
+    lastT=performance.now();
+    requestAnimationFrame(loop);
+  });
+
+})();
+</script>
+</body>
+</html>
